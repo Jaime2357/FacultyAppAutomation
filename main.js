@@ -19,15 +19,18 @@
 // Conversion Utility function -------------------------------------------------------------------------------------------------------------------------------------
 
 function colNum(column) {
-  let depth = column.length - 1;
-  return (depth * 26) + letter.charCodeAt(depth) - 64;
+  if(column.length == 1){
+    return column.charCodeAt(0) - 64;
+  }
+  let depth = (column.charCodeAt(0)- 64);
+  return (depth * 26) + column.charCodeAt(1) - 64;
 }
 
 
 
 // Variables -------------------------------------------------------------------------------------------------------------------------------------------------------
 
-const SpecificRow = 1; // For appendSingleRow() -> specify row to append
+const SpecificRow = 2; // For appendSingleRow() -> specify row to append
 
 const sourceSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Applications"); //Source Sheet
 const destinationSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Section Duplicates"); //Target Sheet
@@ -58,20 +61,27 @@ function filledCount() {
 
 function setRequests(row) {
   let requests = 4; // Max number of requests
-  let cell = sourceSheet.getRange(row, reqColumns[requests]);
+  let cell = sourceSheet.getRange(row, reqColumns[requests-1]);
   while (cell.isBlank()) { //Iterate until non-null request found
     requests--; // Decrement max number of requests
-    cell = sourceSheet.getRange(SpecificRow, reqColumns[requests]);
+    if(requests == 0){
+      return 1;
+    }
+    cell = sourceSheet.getRange(row, reqColumns[requests-1]);
   };
   return requests;
 }
 
 function setSections(row, reqCol) {
   let secCountCol = reqCol + sectionColumnOffset;
-  return sourceSheet.getRange(row, secCountCol).getValue();
+  let count = sourceSheet.getRange(row, secCountCol)
+  if(count.isBlank()){
+    return 1;
+  }
+  return count.getValue();
 }
 
-function getRanges(i) {
+function getRanges(i, reqCount) {
   let a = reqColumns[0] - 1;
   let b = reqColumns[i - 1];
   let c = reqColumns[i] - 1;
@@ -83,12 +93,16 @@ function getRanges(i) {
   ];
 }
 
-function buildRow(range) {
+function buildRow(row, range) {
   let values = []
   // Loop through each column and check if it falls within the included ranges
   for (let col = 1; col <= lastColumn; col++) {
-    if (range.includes(col)) {
-      let cellValue = sourceSheet.getRange(SpecificRow, col).getValue();
+    let isIncluded = range.some(function (range) {
+        return col >= range.start && col <= range.end;
+      });
+
+    if (isIncluded) {
+      let cellValue = sourceSheet.getRange(row, col).getValue();
       values.push(cellValue);
     }
   }
@@ -99,7 +113,7 @@ function appendTable(builtRow, sectionCount) {
   // Append the values to the next empty rows in the destination sheet
   for (let i = 0; i < sectionCount; i++) {
     let lastRow = destinationSheet.getLastRow();
-    destinationSheet.getRange(lastRow + 1, 1, 1, values.length).setValues([builtRow]);
+    destinationSheet.getRange(lastRow + 1, 1, 1, builtRow.length).setValues([builtRow]);
   }
 }
 
@@ -108,8 +122,8 @@ function appendRow(row) { // Main driver function
 
   for (let i = 1; i <= reqCount; i++) {
     let sectionCount = setSections(row, reqColumns[i - 1]);
-    let range = getRanges(i);
-    var builtRow = buildRow(range);
+    let range = getRanges(i, reqCount);
+    var builtRow = buildRow(row, range);
     appendTable(builtRow, sectionCount);
   }
 }
@@ -128,8 +142,8 @@ function appendNewRows() {
   for (var row = 2; row <= count; row++) {// Repeat process for each row in the original sheet
     if (sourceSheet.getRange(row, dCheckColumn).isBlank()) {// Only duplicate NEW rows (Rows that do not have the duplicate checkbox marked)
       appendRow(row);
+      sourceSheet.getRange(row, dCheckColumn).setValue('X');
     }
-    sourceSheet.getRange(row, dCheckColumn).setValue('X');
   }
 }
 
@@ -137,6 +151,7 @@ function appendAllRows() {
   const count = filledCount();
   for (var row = 2; row <= count; row++) {
     appendRow(row);
+    console.log(row);
+    sourceSheet.getRange(row, dCheckColumn).setValue('X');
   }
-  sourceSheet.getRange(row, dCheckColumn).setValue('X');
 }
